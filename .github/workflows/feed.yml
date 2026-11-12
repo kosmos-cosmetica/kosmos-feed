@@ -1,7 +1,8 @@
 name: Catálogo para ChatGPT
 
 # Todos los días a las 6:00 de Argentina arma el archivo de productos desde
-# Tiendanube y lo publica en https://kosmos-feed.pages.dev/chatgpt_productos.csv
+# Tiendanube y lo publica con GitHub Pages en
+# https://kosmos-cosmetica.github.io/kosmos-feed/chatgpt_productos.csv
 # (link cargado en ChatGPT Business Hub → Productos → «Usar una URL alojada»).
 on:
   schedule:
@@ -10,11 +11,20 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   publicar:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,15 +36,15 @@ jobs:
           TN_ACCESS_TOKEN: ${{ secrets.TN_ACCESS_TOKEN }}
           TN_USER_AGENT: ${{ secrets.TN_USER_AGENT }}
         run: python chatgpt_feed.py
-      - name: Publicar en kosmos-feed.pages.dev
-        working-directory: publicar_feed
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx --yes wrangler@3.114.17 pages deploy . --project-name=kosmos-feed --branch=main --commit-dirty=true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: publicar_feed
+      - id: deploy
+        uses: actions/deploy-pages@v4
       - name: Verificar que quedó público
         run: |
-          sleep 20
-          code=$(curl -s -o /dev/null -w "%{http_code}" https://kosmos-feed.pages.dev/chatgpt_productos.csv)
+          sleep 30
+          code=$(curl -s -o /dev/null -w "%{http_code}" https://kosmos-cosmetica.github.io/kosmos-feed/chatgpt_productos.csv)
           echo "HTTP $code"
           test "$code" = "200"

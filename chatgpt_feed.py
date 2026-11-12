@@ -3,7 +3,7 @@
 Lee los productos publicados de Tiendanube y arma el archivo con el formato de
 OpenAI (https://developers.openai.com/commerce/specs/feed): una fila por
 variante con precio, stock, imagen y link a la ficha. El workflow lo publica
-todos los días en https://kosmos-feed.pages.dev/chatgpt_productos.csv, que es
+todos los días en https://kosmos-cosmetica.github.io/kosmos-feed/chatgpt_productos.csv, que es
 el link cargado en ChatGPT Business Hub → Productos → «Usar una URL alojada».
 
 Solo datos públicos de la vidriera. Las credenciales llegan por variables de
@@ -65,7 +65,9 @@ def limpio(h, tope=4500):
     t = re.sub(r"<(br|/p|/li|/h\d)\s*/?>", "\n", texto(h), flags=re.I)
     t = html.unescape(re.sub(r"<[^>]+>", " ", t))
     t = re.sub(r"[ \t ]+", " ", t)
-    t = re.sub(r"\s*\n\s*", "\n", t).strip()
+    # Una sola línea por producto: algunos lectores de CSV se traban con saltos
+    # de línea dentro de un campo, aunque vayan entre comillas.
+    t = re.sub(r"\s*\n\s*", " · ", t).strip(" ·")
     return t[:tope].rsplit(" ", 1)[0] + "…" if len(t) > tope else t
 
 
