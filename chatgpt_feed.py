@@ -21,7 +21,8 @@ API = "https://api.tiendanube.com/2025-03"
 POR_PAGINA = 200
 CAMPOS = ["item_id", "title", "description", "url", "brand", "seller_name",
           "image_url", "additional_image_urls", "availability", "price",
-          "sale_price", "condition", "product_category", "is_eligible_search"]
+          "sale_price", "condition", "product_category", "is_eligible_search",
+          "target_countries", "store_country"]
 
 
 def _get(path, **params):
@@ -130,6 +131,9 @@ def filas(prods):
                 "condition": "new",
                 "product_category": CATEGORIA,
                 "is_eligible_search": "true",
+                # Obligatorios según la especificación de OpenAI (16/11/2026).
+                "target_countries": "AR",
+                "store_country": "AR",
             }
 
 
