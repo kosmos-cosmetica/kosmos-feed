@@ -22,7 +22,8 @@ POR_PAGINA = 200
 CAMPOS = ["item_id", "title", "description", "url", "brand", "seller_name",
           "image_url", "additional_image_urls", "availability", "price",
           "sale_price", "condition", "product_category", "is_eligible_search",
-          "target_countries", "store_country"]
+          "target_countries", "store_country", "group_id", "listing_has_variations",
+          "variant_dict"]
 
 
 def _get(path, **params):
@@ -72,6 +73,39 @@ def limpio(h, tope=4500):
     return t[:tope].rsplit(" ", 1)[0] + "…" if len(t) > tope else t
 
 
+SIGLAS = {"AHA", "BHA", "PHA", "SPF", "FPS", "UV", "UVA", "UVB", "ML", "GR", "DIY", "LED", "PH", "B5", "B3", "Q10", "HA"}
+
+
+PROPIOS = {"KOSMOS": "Kosmos", "VITC": "VitC"}
+
+
+def suave(t):
+    """Los nombres de Tienda Nube arrancan en mayúsculas («GEL DE LIMPIEZA - …»).
+    Pasa a minúsculas sólo las palabras en mayúsculas sostenidas y respeta siglas,
+    letras sueltas (vitamina C) y números; la primera letra queda en mayúscula."""
+    def palabra(m):
+        w = m.group(0)
+        if w.upper() in PROPIOS:
+            return PROPIOS[w.upper()]
+        if w in ("Y", "O", "E", "A", "U"):
+            return w.lower()  # conjunciones y preposiciones sueltas
+        if len(w) <= 1 or w.upper() in SIGLAS or any(c.isdigit() for c in w):
+            return w
+        return w.lower()
+    t = re.sub(r"\b[A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ0-9]*\b", lambda m: palabra(m) if (len(m.group(0)) > 1 or m.group(0) in "YOEAU") else m.group(0), t)
+    return t[:1].upper() + t[1:]
+
+
+def titular(nombre, valores, tope=150):
+    """Nombre + variante sin pasar el tope y sin cortar la variante: si no entra,
+    se acorta el nombre (antes se cortaba al final y 23 variantes quedaban iguales)."""
+    cola = (" - " + " / ".join(valores)) if valores else ""
+    base = suave(nombre)
+    if len(base) + len(cola) > tope:
+        base = base[:max(20, tope - len(cola) - 1)].rsplit(" ", 1)[0].rstrip(" -/+") + "…"
+    return (base + cola)[:tope]
+
+
 def monto(n):
     return "%.2f %s" % (n, MONEDA)
 
@@ -80,7 +114,7 @@ def productos():
     pagina, out = 1, []
     while True:
         lote = _get("/products", per_page=POR_PAGINA, page=pagina,
-                       fields="id,name,description,handle,canonical_url,published,"
+                       fields="id,name,description,handle,canonical_url,published,attributes,"
                               "variants,images,free_shipping")
         if not lote:
             break
@@ -102,13 +136,14 @@ def filas(prods):
         desc = limpio(p.get("description")) or nombre
         variantes = p.get("variants") or []
         varias = len(variantes) > 1
+        atributos = [texto(a).strip().rstrip(":").strip() for a in (p.get("attributes") or [])]
         for v in variantes:
             lista = _num(v.get("price"))
             if not lista:
                 continue  # sin precio o regalo: no va a ChatGPT
             promo = _num(v.get("promotional_price"))
             valores = [texto(x) for x in (v.get("values") or []) if texto(x)]
-            titulo = nombre + (" - " + " / ".join(valores) if varias and valores else "")
+            titulo = titular(nombre, valores if varias else [])
             img = imagenes.get(v.get("image_id")) or (orden[0] if orden else "")
             if not img:
                 continue  # OpenAI exige imagen
@@ -118,7 +153,7 @@ def filas(prods):
             disponible = "out_of_stock" if (maneja_stock and stock is not None and stock <= 0) else "in_stock"
             yield {
                 "item_id": str(v.get("id")),
-                "title": titulo[:150],
+                "title": titulo,
                 "description": desc,
                 "url": url + ("?variant=%s" % v.get("id") if varias else ""),
                 "brand": MARCA,
@@ -134,6 +169,12 @@ def filas(prods):
                 # Obligatorios según la especificación de OpenAI (16/11/2026).
                 "target_countries": "AR",
                 "store_country": "AR",
+                # Variantes agrupadas bajo el producto (spec de OpenAI: group_id,
+                # listing_has_variations y variant_dict serializado como JSON).
+                "group_id": str(p.get("id")) if varias else "",
+                "listing_has_variations": "true" if varias else "",
+                "variant_dict": json.dumps(dict(zip(atributos or ["Opción"] * len(valores), valores)),
+                                           ensure_ascii=False) if (varias and valores and len(atributos) >= len(valores)) else "",
             }
 
 
