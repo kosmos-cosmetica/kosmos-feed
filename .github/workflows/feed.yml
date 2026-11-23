@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.deploy_reintento.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,7 +40,20 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: publicar_feed
+      # 23/11/2026: dos veces en ocho días (20/11 y 23/11) deploy-pages no
+      # encontró el archivo recién subido ("No artifacts named github-pages"):
+      # la API de GitHub tarda unos segundos en verlo. Se le da tiempo y, si
+      # igual falla, se reintenta una vez un minuto después.
+      - name: Esperar a que GitHub registre el archivo
+        run: sleep 15
       - id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+      - name: Esperar antes de reintentar
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 60
+      - id: deploy_reintento
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
       - name: Verificar que quedó público
         run: |
