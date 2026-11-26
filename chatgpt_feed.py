@@ -63,6 +63,29 @@ def texto(v):
     return v or ""
 
 
+def prolijo(t):
+    """La descripción es el texto del anuncio en ChatGPT Ads (26/11/2026): las
+    líneas de encabezado vienen en mayúsculas («GEL DE LIMPIEZA FACIAL»), los
+    activos partidos en dos líneas («… · + Té Verde») y el tamaño entre guiones
+    («- 200 ml -»). Se emprolija sin tocar el contenido."""
+    partes = []
+    for seg in [x.strip() for x in t.split(" · ") if x.strip()]:
+        seg = re.sub(r"^-\s*(.*?)\s*-$", r"\1", seg)          # «- 200 ml -» → «200 ml»
+        seg = re.sub(r"\s+([,.;:])", r"\1", seg)               # «Toner , formulado» → «Toner, formulado»
+        letras = [c for c in seg if c.isalpha()]
+        if letras and sum(c.isupper() for c in letras) / len(letras) > 0.6:
+            # Si el mismo texto aparece más adelante bien escrito («Brightening
+            # Drops»), se usa ese; si no, minúsculas con siglas respetadas.
+            m = re.search(re.escape(seg), t[len(seg):], flags=re.I)
+            otro = m.group(0) if m else ""
+            seg = otro if (otro and not otro.isupper()) else suave(seg)
+        if seg.startswith("+") and partes:
+            partes[-1] = partes[-1] + " " + seg                  # activos partidos en dos líneas
+        else:
+            partes.append(seg)
+    return " · ".join(partes)
+
+
 def limpio(h, tope=4500):
     t = re.sub(r"<(br|/p|/li|/h\d)\s*/?>", "\n", texto(h), flags=re.I)
     t = html.unescape(re.sub(r"<[^>]+>", " ", t))
@@ -70,6 +93,7 @@ def limpio(h, tope=4500):
     # Una sola línea por producto: algunos lectores de CSV se traban con saltos
     # de línea dentro de un campo, aunque vayan entre comillas.
     t = re.sub(r"\s*\n\s*", " · ", t).strip(" ·")
+    t = prolijo(t)
     return t[:tope].rsplit(" ", 1)[0] + "…" if len(t) > tope else t
 
 
